@@ -8,8 +8,8 @@ from flask import Flask, request, jsonify
 import asyncio, os
 
 app = Flask(__name__)
-API_ID = int(os.getenv("API_ID","12345678"))
-API_HASH = os.getenv("API_HASH","your_hash")
+API_ID = int(os.getenv("API_ID","31724382"))
+API_HASH = os.getenv("API_HASH","cdaa5c6f43ec7eccbe7142d25e6e1c67")
 # store phone_code_hash per phone
 sessions = {}
 
