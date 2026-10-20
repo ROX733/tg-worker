@@ -1,5 +1,4 @@
-
-# app.py — Safe Telegram Worker Diagnostics
+# app.py
 # Render Start Command:
 # gunicorn --workers 1 app:app
 
@@ -17,21 +16,21 @@ API_HASH = os.getenv("API_HASH", "").strip()
 
 @app.route("/", methods=["GET"])
 def home():
-    return "Telegram Worker Diagnostics OK"
+    return "TG Worker OK"
 
 
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({
         "ok": True,
-        "service": "telegram-worker",
+        "service": "tg-worker",
         "api_configured": bool(API_ID and API_HASH)
     })
 
 
 @app.route("/debug", methods=["GET"])
 def debug():
-    # Never return API hashes, OTPs, passwords, or session strings.
+    # Do not expose credentials or session data.
     return jsonify({
         "ok": True,
         "has_api_id": bool(API_ID),
@@ -39,34 +38,50 @@ def debug():
     })
 
 
-@app.route("/validate_phone", methods=["POST"])
-def validate_phone():
+@app.route("/send_code", methods=["POST"])
+def send_code():
     data = request.get_json(silent=True) or {}
     phone = str(data.get("phone") or "").strip()
 
-    # E.164-like format check; this does not verify ownership.
+    # Validate international phone-number formatting.
     if not re.fullmatch(r"\+[1-9][0-9]{7,14}", phone):
         return jsonify({
             "ok": False,
             "error": "Invalid phone format. Use international format, e.g. +919999999999."
         }), 400
 
+    if not API_ID or not API_HASH:
+        return jsonify({
+            "ok": False,
+            "error": "API_ID/API_HASH are not configured on Render."
+        }), 503
+
+    # This diagnostic endpoint intentionally does not send an OTP.
     return jsonify({
-        "ok": True,
-        "phone_format": "valid"
-    })
+        "ok": False,
+        "error": "OTP sending is not enabled in this diagnostic worker."
+    }), 501
+
+
+@app.route("/verify", methods=["POST"])
+def verify():
+    return jsonify({
+        "ok": False,
+        "error": "OTP verification is not enabled in this diagnostic worker."
+    }), 501
 
 
 @app.errorhandler(404)
-def not_found(_error):
+def not_found(error):
     return jsonify({
         "ok": False,
-        "error": "Endpoint not found"
+        "error": "Unknown endpoint"
     }), 404
 
 
 @app.errorhandler(500)
-def internal_error(_error):
+def internal_error(error):
+    app.logger.exception("Internal server error")
     return jsonify({
         "ok": False,
         "error": "Internal server error"
@@ -78,4 +93,3 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=int(os.getenv("PORT", "8080"))
     )
-    
