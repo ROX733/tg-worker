@@ -100,16 +100,20 @@ def send_code():
 @app.route("/verify", methods=["POST"])
 def verify():
     data = request.get_json(force=True) or {}
-    phone = data.get("phone", "").strip()
+    phone = data.get("phone","").strip()
     code = "".join(c for c in str(data.get("code") or "") if c.isdigit())
     password = data.get("password")
-    pch = (data.get("phone_code_hash") or sessions.get(phone, {}).get("hash") or "").strip()
-    sess_str = sessions.get(phone, {}).get("session_str") or ""
+    # Hash pehle sessions dict se, fir request se
+    pch = (sessions.get(phone,{}).get("hash") or data.get("phone_code_hash") or "").strip()
+    sess_str = sessions.get(phone,{}).get("session_str") or ""
     api_id = int(data.get("api_id") or API_ID)
     api_hash = data.get("api_hash") or API_HASH
 
-    if not phone or not code:
-        return jsonify({"ok": False, "error": "Missing phone/code"})
+    print(f"[VERIFY] Phone: {phone}, Code: {code}, Hash: {pch[:10]}..., Session exists: {bool(sess_str)}")
+    print(f"[VERIFY] All sessions keys: {list(sessions.keys())}")
+
+    if not pch:
+        return jsonify({"ok": False, "error": "OTP expired. check the worker's phone_code_hash handling. Send OTP again /TgAddPhone"})
 
     async def _verify():
         client = TelegramClient(StringSession(sess_str) if sess_str else StringSession(), api_id, api_hash)
@@ -128,16 +132,7 @@ def verify():
         await client.disconnect()
         if phone in sessions:
             del sessions[phone]
-        return {
-            "ok": True,
-            "session": final_sess,
-            "user_id": me.id,
-            "name": me.first_name,
-            "year": year,
-            "created": created,
-            "spam_status": spam_status,
-            "spam_raw": spam_raw
-        }
+        return {"ok": True, "session": final_sess, "user_id": me.id, "name": me.first_name, "year": year, "created": created, "spam_status": spam_status, "spam_raw": spam_raw}
 
     try:
         r = run(_verify())
@@ -145,6 +140,13 @@ def verify():
             return jsonify({"ok": False, "need_2fa": True})
         return jsonify(r)
     except Exception as e:
+        print(f"[VERIFY ERROR] {e}")
+        # Common errors
+        err = str(e)
+        if "expired" in err.lower():
+            return jsonify({"ok": False, "error": "OTP expired, please send /TgAddPhone again and enter code within 2 mins"})
+        if "invalid" in err.lower():
+            return jsonify({"ok": False, "error": f"Invalid OTP: {err}. Try again"})
         return jsonify({"ok": False, "error": f"{e}"})
 
 # ========== ACCOUNT BUY FLOW - OTP WALA BOT ==========
